@@ -146,7 +146,7 @@
   <span class="navbar-brand">❄️ CoolBreeze AC</span>
   <div class="d-flex align-items-center">
     <span class="navbar-text">Hi, {{ request.user.first_name }}</span>
-    <form method="POST" action="#" style="display:inline;">
+    <form method="POST" action="{% url 'login' %}" style="display:inline;">
       {% csrf_token %}
       <button type="submit" class="logout-btn">Logout</button>
     </form>
