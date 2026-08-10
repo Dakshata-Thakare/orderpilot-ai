@@ -24,5 +24,6 @@ urlpatterns = [
     #login endpoint
     path('login/',auth_views.LoginView.as_view(template_name="login.html"),name="login"),
     path('logout/',auth_views.LoginView.as_view(),name="logout"),
-    path('orders/',include('orders.urls'))
+    path('orders/',include('orders.urls')),
+    path('support/',include('support.urls'))
 ]

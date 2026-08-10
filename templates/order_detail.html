@@ -347,6 +347,30 @@
 
 </div>
 <script>
+  function showTyping(){
+    const messages = document.getElementById("chat-messages");
+    //messages.insertAdjacentHTML(where,what)
+    messages.insertAdjacentHTML("beforeend", `
+        <div id="typing-indicator" class="agent-message p-2 px-3 typing-message"
+             style="font-size:13px; max-width:80%;">
+            Typing....
+        </div>
+    `);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  {% comment %} function hideTyping(){
+    document.getElementById("typing-indicator").remove();
+  } {% endcomment %}
+
+  function hideTyping() {
+    const typing = document.getElementById("typing-indicator");
+
+    if (typing) {
+        typing.remove();
+    }
+  }
+
   function showChat(){
     document.getElementById("help-card").style.display = "none";
     const chatBox = document.getElementById("chat-box");
@@ -366,16 +390,44 @@
     messages.scrollTop = messages.scrollHeight;
   }
 
-  function sendMessage(){
+  async function sendMessage(){
     const input = document.getElementById("chat-input");
     const message = input.value.trim();
-
+    console.log('message====>',message)
     if (!message) return;
     appendMessage(message,"customer");
 
     input.value = "";
+    input.disabled = true;
+    //showTyping();
+    const typingTimeOut = setTimeout(() => showTyping(), 2000); //showtyping after 2 sec
+    //send message to django view
+    try{
+      const response = await fetch("/support/chat/{{order.id}}/",{
+        method:"POST",
+        headers:{
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({message: message})
+      });
 
-  }
+      {% comment %} console.log('response====>',await response.json()); {% endcomment %}
+      const data = await response.json()
+      {% comment %} console.log("data::::::",data) {% endcomment %}
+      hideTyping();
+      appendMessage(data.reply,"Assistant")
+      input.disabled  =false;
+      input.focus();
+    }catch(error) {
+    console.error("Error", error)
+    appendMessage("Sorry, something went wrong", "Assistant")
+    }finally{
+      clearTimeout(typingTimeOut);
+      hideTyping();
+    }
+
+    }
 
   // send message on Enter key
   document.getElementById("chat-input").addEventListener("keydown",function(e){

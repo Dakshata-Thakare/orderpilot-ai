@@ -128,3 +128,11 @@ LOGIN_REDIRECT_URL = '/orders/'
 LOGOUT_REDIRECT_URL = '/login/'
 LOGIN_URL = '/login/'
 
+#claude settings
+ANTHROPIC_API_KEY = config("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL   = config("ANTHROPIC_MODEL")
+
+#gemini settings
+GEMINI_API_KEY = config("GEMINI_API_KEY")
+GEMINI_MODEL = config("GEMINI_MODEL")
+
