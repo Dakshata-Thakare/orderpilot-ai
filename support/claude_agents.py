@@ -34,6 +34,27 @@ Important rules:
 """
 
 
+MANAGER_SYSTEM_PROMPT = """
+You are a senior support manager at CoolBreeze AC.
+A support agent has escalated a customer case to you for a refund decision.
+
+Your responsibilities:
+- Review the case summary carefully
+- Consider the customer's refund history
+- Make a fair and final refund decision
+- Give a clear reason for your decision
+
+Your decision options:
+- Approve refund — if the case is genuine and within policy
+- Deny refund — if the case is suspicious or outside policy
+- Escalate to risk team — if you suspect fraud
+
+Important rules:
+- Be fair but firm
+- Base decision on facts — not emotions
+- Always give a specific reason for your decision
+- Keep your response concise and professional
+"""
 
 
 
@@ -87,23 +108,22 @@ SUPPORT_TOOLS = [
             },
             "required": ["tracking_number", "carrier"]
         }
-    }
-    # ,
+    },
 
-    # {
-    #     "name": "escalate_to_manager",
-    #     "description": "Escalate the case to manager for refund decision. Always include customer's user_id in the case summary so manager can assess fraud risk accurately.",
-    #     "input_schema": {
-    #         "type": "object",
-    #         "properties": {
-    #             "case_summary": {
-    #                 "type": "string",
-    #                 "description": "Complete case summary. Must include: customer user_id, order details, refund history and complaint. Format: Start with 'Customer User ID: X' on the first line."
-    #             }
-    #         },
-    #         "required": ["case_summary"]
-    #     }
-    # },
+    {
+        "name": "escalate_to_manager",
+        "description": "Escalate the case to manager for refund decision. Always include customer's user_id in the case summary so manager can assess fraud risk accurately.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "case_summary": {
+                    "type": "string",
+                    "description": "Complete case summary. Must include: customer user_id, order details, refund history and complaint. Format: Start with 'Customer User ID: X' on the first line."
+                }
+            },
+            "required": ["case_summary"]
+        }
+    },
 
     # {
     #     "name": "search_knowledge_base",
@@ -171,6 +191,13 @@ def execute_tool(tool_name,tool_input):
 
     if tool_name == "check_delivery_status":
         return check_delivery_status(tool_input["tracking_number"],tool_input["carrier"])
+
+    if tool_name == "escalate_to_manager":
+        case_summary = tool_input["case_summary"]
+        print("escalating to manager ====> ",case_summary)
+        decision = claude_run_manager_agent(case_summary)
+        print("decision===> ",decision)
+        return decision
 
 
 
@@ -247,3 +274,41 @@ def claude_run_support_agent(user_message,conversation_id,order_id,user_id):
                     
         # final_text = response.content[0].text
         # return final_text
+
+def claude_run_manager_agent(case_summary):
+    # Whenever we send a message to our agent, we always use the "user" role, not the "assistant" role, because the message is an input to the agent.
+    manager_messages = [
+        {
+            "role":"user",
+            "content": case_summary
+        }
+    ]
+
+    while True:
+        response = client.messages.create(
+            model = anthropic_model,
+            max_tokens = 1024,
+            system = MANAGER_SYSTEM_PROMPT,
+            messages=manager_messages
+        )
+
+        if response.stop_reason == 'tool_use':
+            tool_result = []
+            for block in response.content:
+                if block.type == 'tool_use':
+                    result = execute_tool(block.name,block.input)
+                    tool_result.append({
+                        "type":"tool_result",
+                        "tool_use_id":block.id,
+                        "content":str(result)
+                    })
+            manager_messages.append({
+                "role":"assistant",
+                "content":response.content
+            })
+            manager_messages.append({
+                "role":"user",
+                "content":tool_result
+            })
+        else:
+            return response.content[0].text
