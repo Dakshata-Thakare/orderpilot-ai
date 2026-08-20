@@ -26,6 +26,14 @@ class Message(models.Model):
     def __str__(self):
         return f"{self.role} : {self.content[:50]}"
 
+    @property
+    def manager_involved(self):
+        return self.agentlogs.filter(event_type="manager").exists()
+
+    @property
+    def risk_assessed(self):
+        return self.agentlogs.filter(event_type="risk").exists()
+
 class AgentLog(models.Model):
     EVENT_CHOICES = [
             ("support","Support Agent"),
