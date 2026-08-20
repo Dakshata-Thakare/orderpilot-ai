@@ -31,6 +31,8 @@ Important rules:
 - Always check order details first before responding
 - Never approve or deny a refund yourself
 - If refund decision is needed - tell customer you are checking with your team
+- Never use bold text, bullet points or any markdown formatting. Plain text only.
+- Keep replies concise and conversational. Maximum 3-4 sentences. No long paragraphs.
 """
 
 
@@ -204,7 +206,7 @@ RISK_TOOLS = [
 
 
 #execute_tool() ----> bridge between claude and python functions (tools)
-def execute_tool(tool_name,tool_input):
+def execute_tool(tool_name,tool_input,conversation_id=None):
     if tool_name == "get_order_details":
         return get_order_details(tool_input["order_id"])
 
@@ -217,14 +219,14 @@ def execute_tool(tool_name,tool_input):
     if tool_name == "escalate_to_manager":
         case_summary = tool_input["case_summary"]
         print("escalating to manager ====> ",case_summary)
-        decision = claude_run_manager_agent(case_summary)
+        decision = claude_run_manager_agent(case_summary,conversation_id)
         print("decision===> ",decision)
         return decision
 
     if tool_name == 'assess_fraud_risk':
         user_id = tool_input['user_id']
-        print("Consulting rish agent for user====> ",user_id)
-        verdict = claude_run_risk_agent(user_id)
+        print("Consulting risk agent for user====> ",user_id)
+        verdict = claude_run_risk_agent(user_id,conversation_id)
         print("risk verdict===> ",verdict)
         return verdict
 
@@ -267,6 +269,8 @@ def claude_run_support_agent(user_message,conversation_id,order_id,user_id):
             tool_result = []
             for block in response.content:
                 if block.type == 'tool_use':
+                    #log tool call
+                    AgentLog.objects.create(conversation=conv,event_type="tool_call",message=f"Calling tool {block.name} with input {block.input}")
                     '''
                         tool call==> get_order_details
                         tool input ==> {'order_id': 3}
@@ -284,7 +288,10 @@ def claude_run_support_agent(user_message,conversation_id,order_id,user_id):
                     print("tool input ====> ",block.input) #Gives you the arguments Claude wants to pass to your tool
 
                     #execute the tool
-                    result = execute_tool(block.name,block.input)
+                    result = execute_tool(block.name,block.input,conversation_id)
+                    #log tool result
+                    AgentLog.objects.create(conversation=conv,event_type="tool_result",message=f"Tool: {block.name} returned:{str(result)[:200]}")
+
                     print("tool result ",result)
                     tool_result.append({
                         "type":"tool_result",
@@ -301,13 +308,18 @@ def claude_run_support_agent(user_message,conversation_id,order_id,user_id):
                 "content": tool_result
             })
         else:
+            # LOG THE FINAL REPLY
+            AgentLog.objects.create(conversation=conv,event_type="final",message=response.content[0].text)
             return response.content[0].text
 
                     
         # final_text = response.content[0].text
         # return final_text
 
-def claude_run_manager_agent(case_summary):
+def claude_run_manager_agent(case_summary,conversation_id):
+    conv = Conversation.objects.get(id=conversation_id)
+    AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Case received for review: {case_summary[:200]}")
+
     # Whenever we send a message to our agent, we always use the "user" role, not the "assistant" role, because the message is an input to the agent.
     manager_messages = [
         {
@@ -329,7 +341,9 @@ def claude_run_manager_agent(case_summary):
             tool_result = []
             for block in response.content:
                 if block.type == 'tool_use':
-                    result = execute_tool(block.name,block.input)
+                    #log consulting risk agent
+                    AgentLog.objects.create(conversation=conv,event_type="manager",message="Consulting risk agent for fraud assessment...")
+                    result = execute_tool(block.name,block.input,conversation_id)
                     tool_result.append({
                         "type":"tool_result",
                         "tool_use_id":block.id,
@@ -344,9 +358,14 @@ def claude_run_manager_agent(case_summary):
                 "content":tool_result
             })
         else:
-            return response.content[0].text
+            decision = response.content[0].text
+            AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Decision: {decision[:200]}")
+            return decision
 
-def claude_run_risk_agent(user_id):
+def claude_run_risk_agent(user_id,conversation_id):
+    conv = conversation_id.objects.get(id=conversation_id)
+    #log assessment started
+    AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Starting fraud assessment for user {user_id}")
     risk_messages = [
         {"role":"user",
          "content": f"Please assess the fraud risk for user ID :{user_id}. Use your tool to get their profile and return a verdict."
@@ -367,7 +386,8 @@ def claude_run_risk_agent(user_id):
             tool_result = []
             for block in response.content:
                 if block.type == "tool_use":
-                    result = execute_tool(block.name, block.input)
+                    AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Calling {block.name} to get customer risk profile...")
+                    result = execute_tool(block.name, block.input,conversation_id)
 
                     tool_result.append({
                         "type": "tool_result",
@@ -384,4 +404,6 @@ def claude_run_risk_agent(user_id):
                 "content": tool_result
             })
         else:
-            return response.content[0].text
+            verdict = response.content[0].text
+            AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Verdict:  {verdict}[:200]")
+            return verdict

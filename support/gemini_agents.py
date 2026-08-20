@@ -30,6 +30,8 @@ Important rules:
 - Always check order details first before responding
 - Never approve or deny a refund yourself
 - If refund decision is needed - tell customer you are checking with your team
+- Never use bold text, bullet points or any markdown formatting. Plain text only.
+- Keep replies concise and conversational. Maximum 3-4 sentences. No long paragraphs.
 """
 
 
@@ -209,7 +211,7 @@ manager_tools = types.Tool(
 )      
 
 #execute_tool() ----> bridge between claude and python functions (tools)
-def execute_tool(tool_name,tool_input):
+def execute_tool(tool_name,tool_input,conversation_id=None):
     if tool_name == "get_order_details":
         return get_order_details(tool_input["order_id"])
 
@@ -222,14 +224,14 @@ def execute_tool(tool_name,tool_input):
     if tool_name == "escalate_to_manager":
         case_summary = tool_input["case_summary"]
         print("escalating to manager ====> ",case_summary)
-        decision = gemini_run_manager_agent(case_summary)
+        decision = gemini_run_manager_agent(case_summary,conversation_id)
         print("decision===> ",decision)
         return decision
 
     if tool_name == 'assess_fraud_risk':
         user_id = tool_input['user_id']
-        print("Consulting rish agent for user====> ",user_id)
-        verdict = gemini_run_risk_agent(user_id)
+        print("Consulting risk agent for user====> ",user_id)
+        verdict = gemini_run_risk_agent(user_id,conversation_id)
         print("risk verdict===> ",verdict)
         return verdict
 
@@ -294,8 +296,13 @@ def gemini_run_support_agent(user_message,conversation_id,order_id,user_id):
             for function_call in function_calls:
                 print("tool call ====> ",function_call.name)
                 print("tool input ===> ",function_call.args)
+                #log tool call
+                AgentLog.objects.create(conversation=conv,event_type="tool_call",message=f"Calling tool {function_call.name} with input {function_call.args}")
 
-                result = execute_tool(function_call.name,function_call.args)
+                result = execute_tool(function_call.name,function_call.args,conversation_id)
+                #log tool result
+                AgentLog.objects.create(conversation=conv,event_type="tool_result",message=f"Tool: {function_call.name} returned:{str(result)[:200]}")
+                
                 print("tool result ====> ",result)
 
                 tool_responses.append(
@@ -321,11 +328,17 @@ def gemini_run_support_agent(user_message,conversation_id,order_id,user_id):
         # print("TEXT:", repr(response.text))
         # print("CANDIDATES:", response.candidates)
         # print("PROMPT FEEDBACK:", response.prompt_feedback)
-        return response.text
 
-def gemini_run_manager_agent(case_summary):
+        # LOG THE FINAL REPLY
+        final = response.text
+        AgentLog.objects.create(conversation=conv,event_type="final",message=final)
+        return final
+
+def gemini_run_manager_agent(case_summary,conversation_id):
     # Whenever we send a message to our agent, we always use the "user" role, not the "assistant" role, because the message is an input to the agent.
     print("case_summary--===> ",case_summary)
+    conv = Conversation.objects.get(id=conversation_id)
+    AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Case received for review: {case_summary[:200]}")
     manager_messages = [
         types.Content(
             role="user",
@@ -347,11 +360,15 @@ def gemini_run_manager_agent(case_summary):
 
         function_calls = response.function_calls
         if not function_calls:
-            return response.text
+            decision = response.text
+            AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Decision: {decision[:200]}")
+            return decision
 
         tool_results = []
         for block in function_calls:
-            result = execute_tool(block.name,block.args)
+            #log consulting risk agent
+            AgentLog.objects.create(conversation=conv,event_type="manager",message="Consulting risk agent for fraud assessment...")
+            result = execute_tool(block.name,block.args,conversation_id)
             tool_results.append(
                 types.Part.from_function_response(
                     name = block.name, 
@@ -370,7 +387,10 @@ def gemini_run_manager_agent(case_summary):
                 )
             )
 
-def gemini_run_risk_agent(user_id):
+def gemini_run_risk_agent(user_id,conversation_id):
+    conv = Conversation.objects.get(id=conversation_id)
+    #log assessment started
+    AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Starting fraud assessment for user {user_id}")
     risk_messages = [
         types.Content(
             role="user",
@@ -418,9 +438,10 @@ def gemini_run_risk_agent(user_id):
 
                 print("Tool called:", function_call.name)
                 print("Tool arguments:", function_call.args)
+                AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Calling {function_call.name} to get customer risk profile...")
 
                 # Execute your actual Python tool
-                result = execute_tool(function_call.name,function_call.args)
+                result = execute_tool(function_call.name,function_call.args,conversation_id)
 
                 print("Tool result:", result)
 
@@ -442,4 +463,6 @@ def gemini_run_risk_agent(user_id):
             )
 
         else:
-            return response.text
+            verdict = response.text
+            AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Verdict:  {verdict}[:200]")
+            return verdict 
