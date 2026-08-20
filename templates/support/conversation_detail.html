@@ -18,7 +18,7 @@
             <div class="card-header fw-semibold" style="font-size:13px;">
               Chat Transcript
             </div>
-            <div class="card-body overflow-auto d-flex flex-column gap-3">
+            <div class="card-body overflow-auto d-flex flex-column gap-3" id="chat-transcript">
 
             {% for msg in messages %}
               {% if msg.role == "user" %}
@@ -54,7 +54,7 @@
             <div class="card-body overflow-auto d-flex flex-column gap-3">
 
               <!-- Log entry -->
-               {% for logs in agentlogs %}
+               {% for log in agentlogs %}
               <div>
                 <div class="d-flex align-items-center gap-2 mb-1">
                 {% if log.event_type == "tool_call" %}
@@ -81,4 +81,18 @@
         </div>
 
       </div>
+      <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const chatTranscript = document.getElementById("chat-transcript");
+            const agentActivity = document.getElementById("agent-activity");
+
+            if (chatTranscript) {
+                chatTranscript.scrollTop = chatTranscript.scrollHeight;
+            }
+
+            if (agentActivity) {
+                agentActivity.scrollTop = agentActivity.scrollHeight;
+            }
+        });
+    </script>
 {% endblock %}
