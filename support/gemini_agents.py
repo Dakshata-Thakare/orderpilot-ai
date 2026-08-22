@@ -4,6 +4,7 @@ from google.genai import types
 from django.conf import settings
 from .tools import get_customer_risk_profile,get_order_details,get_refund_history,check_delivery_status
 from .models import Conversation, Message, AgentLog
+from .event_queue import DONE, publish
 
 #Initialize Gemini client
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -250,15 +251,6 @@ def gemini_run_support_agent(user_message,conversation_id,order_id,user_id):
 
         # Gemini user "user" and "model"
         role = "model" if msg.role == "assistant" else "user"
-
-        # conversation_messages.append({
-        #     "role": role,
-        #     "parts": [
-        #         {
-        #             "text" : msg.content
-        #         }
-        #     ]
-        # })
         conversation_messages.append(
             types.Content(
                 role=role,
@@ -287,24 +279,24 @@ def gemini_run_support_agent(user_message,conversation_id,order_id,user_id):
 
         if function_calls:
             #add gemini's response containing the function call to conversation
-            conversation_messages.append(
-                response.candidates[0].content
-            )
+            conversation_messages.append(response.candidates[0].content)
 
             tool_responses = []
             #execute each requested tool
             for function_call in function_calls:
-                print("tool call ====> ",function_call.name)
-                print("tool input ===> ",function_call.args)
+                #publishing for live support dashboard
+                event = {"type":"tool_call","message": f"Calling tool {function_call.name} with input {function_call.args}"}
+                publish(conversation_id,event)
                 #log tool call
                 AgentLog.objects.create(conversation=conv,event_type="tool_call",message=f"Calling tool {function_call.name} with input {function_call.args}")
 
                 result = execute_tool(function_call.name,function_call.args,conversation_id)
+                #publish tool result
+                event = {"type":"tool_result","message": f"Tool: {function_call.name} returned:{str(result)[:200]}"}
+                publish(conversation_id,event)
                 #log tool result
                 AgentLog.objects.create(conversation=conv,event_type="tool_result",message=f"Tool: {function_call.name} returned:{str(result)[:200]}")
                 
-                print("tool result ====> ",result)
-
                 tool_responses.append(
                     types.Part.from_function_response(
                         name=function_call.name,
@@ -331,13 +323,18 @@ def gemini_run_support_agent(user_message,conversation_id,order_id,user_id):
 
         # LOG THE FINAL REPLY
         final = response.text
+        #publish final reply
+        event = {"type":"final","message":final}
+        publish(conversation_id,event)
         AgentLog.objects.create(conversation=conv,event_type="final",message=final)
+        publish(conversation_id,DONE)
         return final
 
 def gemini_run_manager_agent(case_summary,conversation_id):
     # Whenever we send a message to our agent, we always use the "user" role, not the "assistant" role, because the message is an input to the agent.
-    print("case_summary--===> ",case_summary)
     conv = Conversation.objects.get(id=conversation_id)
+    event = {"type":"manager","message":f"Case received for review: {case_summary[:200]}"}
+    publish(conversation_id,event)
     AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Case received for review: {case_summary[:200]}")
     manager_messages = [
         types.Content(
@@ -361,11 +358,15 @@ def gemini_run_manager_agent(case_summary,conversation_id):
         function_calls = response.function_calls
         if not function_calls:
             decision = response.text
+            event = {"type":"manager","message":f"Decision: {decision[:200]}"}
+            publish(conversation_id,event)
             AgentLog.objects.create(conversation=conv,event_type="manager",message=f"Decision: {decision[:200]}")
             return decision
 
         tool_results = []
         for block in function_calls:
+            event = {"type":"manager","message":"Consulting risk agent for fraud assessment..."}
+            publish(conversation_id,event)
             #log consulting risk agent
             AgentLog.objects.create(conversation=conv,event_type="manager",message="Consulting risk agent for fraud assessment...")
             result = execute_tool(block.name,block.args,conversation_id)
@@ -389,6 +390,8 @@ def gemini_run_manager_agent(case_summary,conversation_id):
 
 def gemini_run_risk_agent(user_id,conversation_id):
     conv = Conversation.objects.get(id=conversation_id)
+    event = {"type":"risk","message":f"Starting fraud assessment for user {user_id}"}
+    publish(conversation_id,event)
     #log assessment started
     AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Starting fraud assessment for user {user_id}")
     risk_messages = [
@@ -438,12 +441,13 @@ def gemini_run_risk_agent(user_id,conversation_id):
 
                 print("Tool called:", function_call.name)
                 print("Tool arguments:", function_call.args)
+                event = {"type":"risk","message":f"Calling {function_call.name} to get customer risk profile..."}
+                publish(conversation_id,event)
                 AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Calling {function_call.name} to get customer risk profile...")
 
                 # Execute your actual Python tool
                 result = execute_tool(function_call.name,function_call.args,conversation_id)
 
-                print("Tool result:", result)
 
                 # Send tool result back to Gemini
                 tool_results.append(
@@ -464,5 +468,7 @@ def gemini_run_risk_agent(user_id,conversation_id):
 
         else:
             verdict = response.text
+            event = {"type":"risk","message":f"Verdict:  {verdict}[:200]"}
+            publish(conversation_id,event)
             AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Verdict:  {verdict}[:200]")
             return verdict 
