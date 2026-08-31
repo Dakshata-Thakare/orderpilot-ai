@@ -429,3 +429,61 @@ def claude_run_risk_agent(user_id,conversation_id):
             publish(conversation_id,event)
             AgentLog.objects.create(conversation=conv,event_type="risk",message=f"Verdict:  {verdict}[:200]")
             return verdict
+
+# def run_risk_agent(user_id, conversation_id):
+#     conv = Conversation.objects.get(id=conversation_id)
+
+#     event = {"type": "risk", "message": f"Starting fraud assessment for user {user_id}"}
+#     publish(conversation_id, event)
+    
+#     # log assessment started
+#     AgentLog.objects.create(conversation=conv, event_type="risk", message=f"Starting fraud assessment for user {user_id}")
+    
+#     risk_messages = [
+#         {"role": "user", "content": f"Please assess the fraud risk for user ID {user_id}. User your tool to get their profile and return a verdict."}
+#     ]
+
+#     while True:
+#         response = client.messages.create(
+#             model=anthropic_model,
+#             max_tokens=1024,
+#             system=RISK_SYSTEM_PROMPT,
+#             tools=RISK_TOOLS,
+#             messages=risk_messages
+#         )
+
+#         print("risk stop_reason===>", response.stop_reason)
+
+#         if response.stop_reason == 'tool_use':
+#             tool_result = []
+#             for block in response.content:
+#                 if block.type == "tool_use":
+#                     event = {"type": "risk", "message": f"Calling {block.name} to get customer risk profile..."}
+#                     publish(conversation_id, event)
+
+#                     AgentLog.objects.create(conversation=conv, event_type="risk", message=f"Calling {block.name} to get customer risk profile...")
+
+#                     result = execute_tool(block.name, block.input, conversation_id)
+
+#                     tool_result.append({
+#                         "type": "tool_result",
+#                         "tool_use_id": block.id,
+#                         "content": str(result)
+#                     })
+#             risk_messages.append({
+#                 "role": "assistant",
+#                 "content": response.content
+#             })
+
+#             risk_messages.append({
+#                 "role": "user",
+#                 "content": tool_result
+#             })
+#         else:
+#             verdict = response.content[0].text
+
+#             event = {"type": "risk", "message": f"Verdict: {verdict[:200]}"}
+#             publish(conversation_id, event)
+            
+#             AgentLog.objects.create(conversation=conv, event_type="risk", message=f"Verdict: {verdict[:200]}")
+#             return verdict
