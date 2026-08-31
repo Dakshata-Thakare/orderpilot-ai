@@ -1,4 +1,4 @@
-﻿[
+[
 {
   "model": "admin.logentry",
   "pk": 1,
@@ -873,7 +873,7 @@
   "fields": {
     "order": 13,
     "user": 5,
-    "reason": "Want to return ΓÇö changed my mind",
+    "reason": "Want to return — changed my mind",
     "status": "denied",
     "created_at": "2026-03-10T10:00:00Z"
   }
@@ -1930,7 +1930,7 @@
   "fields": {
     "conversation": 9,
     "event_type": "manager",
-    "message": "Decision: **Decision:** Approve Refund\n\n**Amount:** Γé╣28,999.00 (Full Refund for Order ID: 8)\n\n**Reasoning:**\n1. **Unconfirmed Delivery:** Carrier tracking (`DL33219876`) shows an unknown status with no valid ca",
+    "message": "Decision: **Decision:** Approve Refund\n\n**Amount:** ₹28,999.00 (Full Refund for Order ID: 8)\n\n**Reasoning:**\n1. **Unconfirmed Delivery:** Carrier tracking (`DL33219876`) shows an unknown status with no valid ca",
     "created_at": "2026-08-20T11:27:31.794Z"
   }
 },
@@ -1940,7 +1940,7 @@
   "fields": {
     "conversation": 9,
     "event_type": "tool_result",
-    "message": "Tool: escalate_to_manager returned:**Decision:** Approve Refund\n\n**Amount:** Γé╣28,999.00 (Full Refund for Order ID: 8)\n\n**Reasoning:**\n1. **Unconfirmed Delivery:** Carrier tracking (`DL33219876`) shows an unknown status with no valid ca",
+    "message": "Tool: escalate_to_manager returned:**Decision:** Approve Refund\n\n**Amount:** ₹28,999.00 (Full Refund for Order ID: 8)\n\n**Reasoning:**\n1. **Unconfirmed Delivery:** Carrier tracking (`DL33219876`) shows an unknown status with no valid ca",
     "created_at": "2026-08-20T11:27:31.803Z"
   }
 },
