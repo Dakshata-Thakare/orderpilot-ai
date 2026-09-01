@@ -1,6 +1,6 @@
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import render,get_object_or_404
-import json ,time
+import json ,time ,queue
 from orders.models import Order
 from support.claude_agents import claude_run_support_agent
 from support.gemini_agents import gemini_run_support_agent
@@ -69,15 +69,23 @@ def conversation_detail(request,conversation_id):
     return render(request,"support/conversation_detail.html",context)
 
 @staff_member_required
-def conversation_stream(request,conversation_id):
+def conversation_stream(request, conversation_id):
+
     def event_stream(conversation_id):
         q = subscribe(conversation_id)
         try:
             while True:
-                event = q.get() #wait for the next event
-                yield f"data: {json.dumps(event)}\n\n"
+                try:
+                    event = q.get(timeout=15)
+
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                except queue.Empty:
+                    # SSE heartbeat
+                    yield ": heartbeat\n\n"
         finally:
-            unsubscribe(conversation_id,q)
+            unsubscribe(conversation_id, q)
+
     response = StreamingHttpResponse(event_stream(conversation_id),content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
